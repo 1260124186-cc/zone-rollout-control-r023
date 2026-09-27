@@ -2,7 +2,6 @@ package probe
 
 import (
 	"context"
-	"time"
 
 	"solo-0014-zone-rollout-control/internal/domain"
 	"solo-0014-zone-rollout-control/internal/platform"
@@ -38,14 +37,15 @@ func (s *Service) Submit(
 	if err := domain.ValidateProbeInput(input, now); err != nil {
 		return domain.Probe{}, err
 	}
-	commitContext, releaseCommit := platform.NewCommitContext(ctx)
-	defer releaseCommit()
-	if _, err := s.expirer.ExpireDue(commitContext); err != nil {
+	// Expiry housekeeping runs in its own transaction with the caller's
+	// context: a canceled request commits nothing, while a live request
+	// keeps the historical behavior of sweeping due leases first.
+	if _, err := s.expirer.ExpireDue(ctx); err != nil {
 		return domain.Probe{}, err
 	}
 	fingerprint := domain.ProbeFingerprint(leaseID, input)
 	var result domain.Probe
-	err := s.store.Write(commitContext, func(state *domain.State) error {
+	err := s.store.Write(ctx, func(state *domain.State) error {
 		lease, ok := state.Leases[leaseID]
 		if !ok {
 			return domain.NotFound("lease", leaseID)
@@ -128,8 +128,4 @@ func (s *Service) Submit(
 		return nil
 	})
 	return result, err
-}
-
-func pointer(value time.Time) *time.Time {
-	return &value
 }

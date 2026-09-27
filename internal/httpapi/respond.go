@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -10,6 +11,10 @@ import (
 )
 
 const requestLimit = 1 << 20
+
+// statusClientClosedRequest is the conventional status for a client that
+// disconnected before the request reached the commit boundary.
+const statusClientClosedRequest = 499
 
 type successBody struct {
 	Data any          `json:"data"`
@@ -48,6 +53,22 @@ func sendData(w http.ResponseWriter, r *http.Request, status int, value any) {
 }
 
 func sendError(w http.ResponseWriter, r *http.Request, err error) {
+	// A canceled or timed-out request is acknowledged without being turned
+	// into a 5xx. The store guarantees no business side effect was committed
+	// when these reach the handler, so the client can safely replay the same
+	// idempotency key.
+	switch {
+	case errors.Is(err, context.Canceled):
+		sendJSON(w, statusClientClosedRequest, failureBody{
+			Error: *domain.NewError(domain.CodeRequestCanceled, "request was canceled before commit", nil),
+		})
+		return
+	case errors.Is(err, context.DeadlineExceeded):
+		sendJSON(w, http.StatusGatewayTimeout, failureBody{
+			Error: *domain.NewError(domain.CodeRequestCanceled, "request deadline elapsed before commit", nil),
+		})
+		return
+	}
 	var target *domain.DomainError
 	if !errors.As(err, &target) {
 		target = domain.NewError(domain.CodeInternal, "internal server error", nil)

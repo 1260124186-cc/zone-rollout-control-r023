@@ -21,6 +21,7 @@ const (
 	CodeConflict            ErrorCode = "conflict"
 	CodeStorageFailure      ErrorCode = "storage_failure"
 	CodeInternal            ErrorCode = "internal_error"
+	CodeRequestCanceled     ErrorCode = "request_canceled"
 )
 
 type DomainError struct {

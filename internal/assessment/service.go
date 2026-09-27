@@ -29,9 +29,7 @@ func (s *Service) Evaluate(
 	now := s.clock.Now().UTC()
 	requestIndex := planID + "\x00" + input.RequestKey
 	var result domain.RolloutAssessment
-	commitContext, releaseCommit := platform.NewCommitContext(ctx)
-	defer releaseCommit()
-	err := s.store.Write(commitContext, func(state *domain.State) error {
+	err := s.store.Write(ctx, func(state *domain.State) error {
 		plan, ok := state.Plans[planID]
 		if !ok {
 			return domain.NotFound("plan", planID)

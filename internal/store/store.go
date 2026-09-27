@@ -82,9 +82,6 @@ func (s *Store) Write(ctx context.Context, fn func(*domain.State) error) error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if err := ctx.Err(); err != nil {
-		return err
-	}
 	next, err := copyState(&s.state)
 	if err != nil {
 		return domain.NewError(domain.CodeStorageFailure, "could not copy state", map[string]any{
@@ -94,6 +91,17 @@ func (s *Store) Write(ctx context.Context, fn func(*domain.State) error) error {
 	if err := fn(&next); err != nil {
 		return err
 	}
+	// Cancellation boundary: if the request was canceled before the durable
+	// commit, the mutated copy is discarded and no business side effect is
+	// recorded. This also covers requests canceled while waiting for the
+	// lock held by another in-flight write.
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	// Commit boundary: from this point on cancellation is ignored. The
+	// snapshot is replaced atomically and the in-memory copy is swapped in,
+	// so a request that reaches here is durably committed and stays
+	// replayable through its idempotency request key.
 	next.SchemaVersion = schemaVersion
 	next.Revision = s.state.Revision + 1
 	if err := replaceFile(s.path, next); err != nil {
