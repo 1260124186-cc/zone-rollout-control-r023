@@ -38,14 +38,12 @@ func (s *Service) Submit(
 	if err := domain.ValidateProbeInput(input, now); err != nil {
 		return domain.Probe{}, err
 	}
-	commitContext, releaseCommit := platform.NewCommitContext(ctx)
-	defer releaseCommit()
-	if _, err := s.expirer.ExpireDue(commitContext); err != nil {
+	if _, err := s.expirer.ExpireDue(ctx); err != nil {
 		return domain.Probe{}, err
 	}
 	fingerprint := domain.ProbeFingerprint(leaseID, input)
 	var result domain.Probe
-	err := s.store.Write(commitContext, func(state *domain.State) error {
+	err := s.store.Write(ctx, func(state *domain.State) error {
 		lease, ok := state.Leases[leaseID]
 		if !ok {
 			return domain.NotFound("lease", leaseID)

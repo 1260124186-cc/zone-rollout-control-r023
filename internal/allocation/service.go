@@ -34,10 +34,8 @@ func (s *Service) Allocate(
 	fingerprint := domain.LeaseFingerprint(planID, input)
 	now := s.clock.Now().UTC()
 	var group domain.LeaseGroup
-	commitContext, releaseCommit := platform.NewCommitContext(ctx)
-	defer releaseCommit()
 
-	err := s.store.Write(commitContext, func(state *domain.State) error {
+	err := s.store.Write(ctx, func(state *domain.State) error {
 		plan, ok := state.Plans[planID]
 		if !ok {
 			return domain.NotFound("plan", planID)

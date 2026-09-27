@@ -94,6 +94,13 @@ func (s *Store) Write(ctx context.Context, fn func(*domain.State) error) error {
 	if err := fn(&next); err != nil {
 		return err
 	}
+	// Final cancellation gate: the mutation above only touched a private
+	// copy, so a request cancelled before this point leaves no side effects.
+	// Once replaceFile succeeds the write is committed and stays replayable,
+	// so the context is not consulted afterwards.
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	next.SchemaVersion = schemaVersion
 	next.Revision = s.state.Revision + 1
 	if err := replaceFile(s.path, next); err != nil {
